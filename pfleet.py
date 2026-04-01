@@ -179,7 +179,7 @@ def _worker_update(repo_dir: str, *, cleanup: bool, default_branch_hint: str) ->
     # Optional: delete local branches already merged into the default branch
     pruned = 0
     if cleanup:
-        pruned = _do_cleanup(repo_dir, default_branch_hint)
+        pruned = _do_cleanup(repo_dir, default_branch_hint, original_branch)
 
     # Restore the original branch or detached HEAD
     if original_branch:
@@ -190,7 +190,7 @@ def _worker_update(repo_dir: str, *, cleanup: bool, default_branch_hint: str) ->
     return f" {ICON_SYNC} {_c(_CYAN, name + '  branches synced')}", pruned
 
 
-def _do_cleanup(repo_dir: str, hint: str) -> int:
+def _do_cleanup(repo_dir: str, hint: str, original_branch: str | None = None) -> int:
     """Delete local branches that have been merged into the default branch."""
     # Determine the default branch
     db_result = _run(
@@ -253,7 +253,7 @@ def _do_cleanup(repo_dir: str, hint: str) -> int:
     pruned = 0
     for branch in merged_result.stdout.splitlines():
         branch = branch.strip()
-        if branch and branch != default_branch and _run(["git", "branch", "-d", branch], cwd=repo_dir).returncode == 0:
+        if branch and branch != default_branch and branch != original_branch and _run(["git", "branch", "-d", branch], cwd=repo_dir).returncode == 0:
             pruned += 1
     return pruned
 

@@ -33,7 +33,7 @@ Open an issue and include:
 - A short, descriptive title.
 - Steps to reproduce the problem.
 - Expected vs. actual behaviour.
-- Your OS, Python version (`python --version`), and `gh` version (`gh --version`).
+- Your OS, Python version (`python --version`), Git version (`git --version`), and `gh` version (`gh --version`).
 
 ## Suggesting features
 

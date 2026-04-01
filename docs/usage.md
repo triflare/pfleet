@@ -33,8 +33,8 @@ pip install .
 pfleet myusername
 ```
 
-This clones every repository owned by `myusername` into the current directory,
-or syncs them if they already exist locally.
+This clones every repository owned by `myusername` into the current directory under an owner subdirectory — each repository is stored at <root>/<owner>/<repo>.
+For example, this creates ./<owner>/<repo> (e.g., ./myusername/<repo>) instead of ./<repo>. If a repository already exists locally it will be synced in place.
 
 ## CLI reference
 
@@ -111,9 +111,7 @@ pfleet myusername --limit 50
 
 ## Notes
 
-- Repositories with a dirty working tree (uncommitted changes or staged files)
-  are **skipped** during sync to avoid data loss.
-- pFleet writes `core.filemode = false` into each repository's Git config to
-  suppress phantom permission-bit diffs on Windows.
+- pFleet determines whether a working tree is dirty by running `git status --porcelain` (so untracked files will mark the tree dirty). Repositories with a dirty working tree are **skipped** during sync to avoid data loss.
+- The implementation writes `core.filemode = false` into a repository's Git config only on Windows (see pfleet.py: _worker_update and _worker_clone where this is set when `sys.platform == "win32"`) to suppress phantom permission-bit diffs.
 - The `--limit` flag caps the number of repositories retrieved per user; raise
   it if a user has more than 100 repositories.
