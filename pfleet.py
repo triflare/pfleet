@@ -8,9 +8,7 @@ Requires Python 3.10+ and the GitHub CLI (gh) to be installed and authenticated.
 
 import sys
 
-if sys.version_info < (3, 10):
-    print("pFleet requires Python 3.10 or newer.", file=sys.stderr)
-    sys.exit(1)
+# Python 3.10+ requirement enforced by pyproject.toml requires-python field
 
 import argparse
 import os
@@ -277,6 +275,7 @@ def process_repo(
     repo_name: str,
     owner: str,
     root_dir: str,
+    *,
     cleanup: bool,
     default_branch_hint: str,
 ) -> tuple[str, int]:
@@ -383,7 +382,8 @@ def _check_gh() -> bool:
     return True
 
 
-def main() -> int:
+def main() -> int:  # noqa: C901 pylint: disable=too-many-branches,too-many-statements
+    # Main has clear linear phases: preflight → banner → cleanup decision → process users → footer
     args = parse_args()
 
     # ------------------------------------------------------------------
@@ -453,8 +453,8 @@ def main() -> int:
                     repo,
                     user,
                     root_dir,
-                    do_cleanup,
-                    args.default_branch,
+                    cleanup=do_cleanup,
+                    default_branch_hint=args.default_branch,
                 )
                 futures[future] = repo
 
