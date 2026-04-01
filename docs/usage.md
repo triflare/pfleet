@@ -22,7 +22,7 @@ pip install pfleet
 ### From source
 
 ```bash
-git clone https://github.com/kx1xixit/pfleet.git
+git clone https://github.com/triflare/pfleet.git
 cd pfleet
 pip install .
 ```
@@ -38,7 +38,7 @@ or syncs them if they already exist locally.
 
 ## CLI reference
 
-```
+```text
 usage: pfleet [-h] [--limit N] [--threads N] [--cleanup | --no-cleanup]
               [--dir DIR] [--default-branch BRANCH]
               USER [USER ...]

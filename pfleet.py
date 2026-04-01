@@ -15,6 +15,7 @@ if sys.version_info < (3, 10):
 import argparse
 import os
 import subprocess
+import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ---------------------------------------------------------------------------
@@ -74,6 +75,7 @@ def _run(cmd: list[str], cwd: str | None = None) -> subprocess.CompletedProcess:
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
+        check=False,
     )
     return result
 
@@ -97,7 +99,7 @@ def _list_repos(user: str, limit: int) -> tuple[list[str] | None, str]:
 # Worker — update an existing local repo
 # ---------------------------------------------------------------------------
 
-def _worker_update(repo_dir: str, cleanup: bool, default_branch_hint: str) -> tuple[str, int]:
+def _worker_update(repo_dir: str, *, cleanup: bool, default_branch_hint: str) -> tuple[str, int]:
     """
     Fetch + sync all remote branches for an already-cloned repo.
     Returns (status_line, branches_pruned).
@@ -221,9 +223,8 @@ def _do_cleanup(repo_dir: str, hint: str) -> int:
     pruned = 0
     for branch in merged_result.stdout.splitlines():
         branch = branch.strip()
-        if branch and branch != default_branch:
-            if _run(["git", "branch", "-d", branch], cwd=repo_dir).returncode == 0:
-                pruned += 1
+        if branch and branch != default_branch and _run(["git", "branch", "-d", branch], cwd=repo_dir).returncode == 0:
+            pruned += 1
     return pruned
 
 
@@ -261,11 +262,9 @@ def process_repo(
 ) -> tuple[str, int]:
     """Return (status_line, branches_pruned)."""
     target_dir = os.path.join(root_dir, _sanitize_dirname(repo_name))
-
     if os.path.isdir(target_dir):
-        return _worker_update(target_dir, cleanup, default_branch_hint)
-    else:
-        return _worker_clone(repo_name, owner, target_dir)
+        return _worker_update(target_dir, cleanup=cleanup, default_branch_hint=default_branch_hint)
+    return _worker_clone(repo_name, owner, target_dir)
 
 
 # ---------------------------------------------------------------------------
@@ -449,6 +448,9 @@ def main() -> int:
                     repo = futures[future]
                     overall_ok = False
                     msg = f" {ICON_FAIL} {_c(_RED, repo + '  unexpected error: ' + str(exc))}"
+                    # Emit full traceback to stderr for diagnostics (not shown to user-facing msg)
+                    tb = traceback.format_exc()
+                    print(tb, file=sys.stderr)
                 print(msg)
 
         print()
