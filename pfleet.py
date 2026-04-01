@@ -22,6 +22,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # ANSI colours & icons
 # ---------------------------------------------------------------------------
 
+
 def _enable_ansi_on_windows() -> None:
     """Enable VT100/ANSI colour processing on Windows 10+ terminals."""
     if sys.platform != "win32":
@@ -29,6 +30,7 @@ def _enable_ansi_on_windows() -> None:
     try:
         import ctypes
         import ctypes.wintypes
+
         kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
         ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
         STD_OUTPUT_HANDLE = ctypes.c_ulong(-11)
@@ -42,42 +44,48 @@ def _enable_ansi_on_windows() -> None:
 
 _enable_ansi_on_windows()
 
-_RESET   = "\033[0m"
-_DIM     = "\033[90m"
-_BOLD    = "\033[1m"
-_CYAN    = "\033[36m"
-_GREEN   = "\033[32m"
-_YELLOW  = "\033[33m"
-_RED     = "\033[31m"
+_RESET = "\033[0m"
+_DIM = "\033[90m"
+_BOLD = "\033[1m"
+_CYAN = "\033[36m"
+_GREEN = "\033[32m"
+_YELLOW = "\033[33m"
+_RED = "\033[31m"
+
 
 def _c(code: str, text: str) -> str:
     return f"{code}{text}{_RESET}"
 
-ICON_WAIT = _c(_DIM,    "[ .... ]")
-ICON_DONE = _c(_GREEN,  "[ DONE ]")
-ICON_SYNC = _c(_CYAN,   "[ SYNC ]")
-ICON_NEW  = _c(_YELLOW, "[ NEW  ]")
-ICON_FAIL = _c(_RED,    "[ FAIL ]")
+
+ICON_WAIT = _c(_DIM, "[ .... ]")
+ICON_DONE = _c(_GREEN, "[ DONE ]")
+ICON_SYNC = _c(_CYAN, "[ SYNC ]")
+ICON_NEW = _c(_YELLOW, "[ NEW  ]")
+ICON_FAIL = _c(_RED, "[ FAIL ]")
 ICON_SKIP = _c(_YELLOW, "[ SKIP ]")
-DIVIDER   = _c(_DIM,    "═" * 62)
-SUBDIV    = _c(_DIM,    "─" * 62)
+DIVIDER = _c(_DIM, "═" * 62)
+SUBDIV = _c(_DIM, "─" * 62)
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _run(cmd: list[str], cwd: str | None = None) -> subprocess.CompletedProcess:
     """Run a command, capturing stdout+stderr.  Never raises on non-zero exit."""
-    result = subprocess.run(
-        cmd,
-        cwd=cwd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        check=False,
-    )
-    return result
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=cwd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            check=False,
+        )
+        return result
+    except FileNotFoundError as exc:
+        return subprocess.CompletedProcess(args=cmd, returncode=127, stdout=str(exc), stderr="")
 
 
 def _sanitize_dirname(name: str) -> str:
@@ -87,8 +95,7 @@ def _sanitize_dirname(name: str) -> str:
 
 def _list_repos(user: str, limit: int) -> tuple[list[str] | None, str]:
     """Return (repo_names, error_message).  On success error_message is empty."""
-    result = _run(["gh", "repo", "list", user, "--limit", str(limit),
-                   "--json", "name", "--jq", ".[].name"])
+    result = _run(["gh", "repo", "list", user, "--limit", str(limit), "--json", "name", "--jq", ".[].name"])
     if result.returncode != 0:
         msg = result.stdout.strip() or f"'gh repo list' failed with exit code {result.returncode}"
         return None, msg
@@ -98,6 +105,7 @@ def _list_repos(user: str, limit: int) -> tuple[list[str] | None, str]:
 # ---------------------------------------------------------------------------
 # Worker — update an existing local repo
 # ---------------------------------------------------------------------------
+
 
 def _worker_update(repo_dir: str, *, cleanup: bool, default_branch_hint: str) -> tuple[str, int]:
     """
@@ -113,11 +121,13 @@ def _worker_update(repo_dir: str, *, cleanup: bool, default_branch_hint: str) ->
     if _run(["git", "rev-parse", "--is-inside-work-tree"], cwd=repo_dir).returncode != 0:
         return f" {ICON_FAIL} {_c(_RED, name + '  not a git repository')}", 0
 
-    # Abort if the working tree is dirty
-    dirty = (
-        _run(["git", "diff", "--quiet"], cwd=repo_dir).returncode != 0
-        or _run(["git", "diff", "--cached", "--quiet"], cwd=repo_dir).returncode != 0
-    )
+    # Abort if the working tree is dirty (includes untracked files)
+    status_result = _run(["git", "status", "--porcelain"], cwd=repo_dir)
+    if status_result.returncode != 0:
+        detail = status_result.stdout.strip()
+        return f" {ICON_FAIL} {_c(_RED, name + '  status check failed')}\n   {_c(_RED, detail)}", 0
+
+    dirty = bool(status_result.stdout.strip())
     if dirty:
         return (
             f" {ICON_SKIP} {_c(_YELLOW, name + '  [dirty tree — skipped]')}",
@@ -130,9 +140,12 @@ def _worker_update(repo_dir: str, *, cleanup: bool, default_branch_hint: str) ->
         detail = fetch.stdout.strip()
         return f" {ICON_FAIL} {_c(_RED, name + '  fetch failed')}\n   {_c(_RED, detail)}", 0
 
-    # Remember the current branch so we can return to it afterwards
+    # Remember the current branch/HEAD so we can return to it afterwards
     br_result = _run(["git", "branch", "--show-current"], cwd=repo_dir)
     original_branch = br_result.stdout.strip()
+
+    head_result = _run(["git", "rev-parse", "--verify", "HEAD"], cwd=repo_dir)
+    original_head = head_result.stdout.strip()
 
     # Sync every remote branch to a matching local branch
     ref_result = _run(
@@ -152,14 +165,16 @@ def _worker_update(repo_dir: str, *, cleanup: bool, default_branch_hint: str) ->
         if co.returncode != 0:
             continue  # non-fatal: try remaining branches
 
-    # Restore the original branch
-    if original_branch:
-        _run(["git", "checkout", original_branch, "--quiet"], cwd=repo_dir)
-
     # Optional: delete local branches already merged into the default branch
     pruned = 0
     if cleanup:
         pruned = _do_cleanup(repo_dir, default_branch_hint)
+
+    # Restore the original branch or detached HEAD
+    if original_branch:
+        _run(["git", "checkout", original_branch, "--quiet"], cwd=repo_dir)
+    else:
+        _run(["git", "checkout", "--detach", original_head, "--quiet"], cwd=repo_dir)
 
     return f" {ICON_SYNC} {_c(_CYAN, name + '  branches synced')}", pruned
 
@@ -203,8 +218,13 @@ def _do_cleanup(repo_dir: str, hint: str) -> int:
         # Branch exists only on the remote — create a local tracking branch.
         checkout_result = _run(
             [
-                "git", "checkout", "-b", default_branch,
-                "--track", f"origin/{default_branch}", "--quiet",
+                "git",
+                "checkout",
+                "-b",
+                default_branch,
+                "--track",
+                f"origin/{default_branch}",
+                "--quiet",
             ],
             cwd=repo_dir,
         )
@@ -214,8 +234,7 @@ def _do_cleanup(repo_dir: str, hint: str) -> int:
 
     # Use plumbing to list branches merged into the default branch (locale-independent)
     merged_result = _run(
-        ["git", "for-each-ref", "--format=%(refname:short)",
-         f"--merged={default_branch}", "refs/heads/"],
+        ["git", "for-each-ref", "--format=%(refname:short)", f"--merged={default_branch}", "refs/heads/"],
         cwd=repo_dir,
     )
     if merged_result.returncode != 0:
@@ -232,6 +251,7 @@ def _do_cleanup(repo_dir: str, hint: str) -> int:
 # Worker — clone a new repo
 # ---------------------------------------------------------------------------
 
+
 def _worker_clone(repo_name: str, owner: str, target_dir: str) -> tuple[str, int]:
     """Clone *owner/repo_name* into *target_dir*. Returns (status_line, 0)."""
     result = _run(["gh", "repo", "clone", f"{owner}/{repo_name}", target_dir, "--", "--quiet"])
@@ -239,8 +259,7 @@ def _worker_clone(repo_name: str, owner: str, target_dir: str) -> tuple[str, int
     if result.returncode != 0:
         detail = result.stdout.strip()
         return (
-            f" {ICON_FAIL} {_c(_RED, repo_name + '  clone failed')}\n"
-            f"   {_c(_RED, 'ERROR:')} {detail}",
+            f" {ICON_FAIL} {_c(_RED, repo_name + '  clone failed')}\n   {_c(_RED, 'ERROR:')} {detail}",
             0,
         )
 
@@ -253,6 +272,7 @@ def _worker_clone(repo_name: str, owner: str, target_dir: str) -> tuple[str, int
 # Per-repo dispatcher
 # ---------------------------------------------------------------------------
 
+
 def process_repo(
     repo_name: str,
     owner: str,
@@ -261,7 +281,7 @@ def process_repo(
     default_branch_hint: str,
 ) -> tuple[str, int]:
     """Return (status_line, branches_pruned)."""
-    target_dir = os.path.join(root_dir, _sanitize_dirname(repo_name))
+    target_dir = os.path.join(root_dir, _sanitize_dirname(owner), _sanitize_dirname(repo_name))
     if os.path.isdir(target_dir):
         return _worker_update(target_dir, cleanup=cleanup, default_branch_hint=default_branch_hint)
     return _worker_clone(repo_name, owner, target_dir)
@@ -270,6 +290,7 @@ def process_repo(
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def _positive_int(value: str) -> int:
     """argparse type that accepts only integers >= 1."""
@@ -291,14 +312,16 @@ def parse_args() -> argparse.Namespace:
         help="GitHub username(s) to sync",
     )
     parser.add_argument(
-        "--limit", "-l",
+        "--limit",
+        "-l",
         type=_positive_int,
         default=100,
         metavar="N",
         help="Maximum repos to fetch per user (default: 100, must be >= 1)",
     )
     parser.add_argument(
-        "--threads", "-t",
+        "--threads",
+        "-t",
         type=_positive_int,
         default=4,
         metavar="N",
@@ -306,7 +329,8 @@ def parse_args() -> argparse.Namespace:
     )
     cleanup_group = parser.add_mutually_exclusive_group()
     cleanup_group.add_argument(
-        "--cleanup", "-c",
+        "--cleanup",
+        "-c",
         dest="cleanup",
         action="store_true",
         default=None,
@@ -319,7 +343,8 @@ def parse_args() -> argparse.Namespace:
         help="Skip merged-branch cleanup (skips interactive prompt)",
     )
     parser.add_argument(
-        "--dir", "-d",
+        "--dir",
+        "-d",
         default=os.getcwd(),
         metavar="DIR",
         help="Root directory for repos (default: current directory)",
@@ -338,7 +363,7 @@ def ask_cleanup() -> bool:
     try:
         answer = input(" Clean merged local branches across ALL repos? [y/N] ").strip().lower()
         return answer in ("y", "yes")
-    except (EOFError, KeyboardInterrupt):
+    except EOFError:
         return False
 
 
@@ -411,10 +436,7 @@ def main() -> int:
         repos, err_msg = _list_repos(user, args.limit)
 
         if repos is None:
-            print(
-                f"\r\033[2K  {ICON_FAIL} {_c(_RED, 'Error fetching repos for ' + user)}\n"
-                f"   {_c(_RED, err_msg)}"
-            )
+            print(f"\r\033[2K  {ICON_FAIL} {_c(_RED, 'Error fetching repos for ' + user)}\n   {_c(_RED, err_msg)}")
             overall_ok = False
             print()
             continue
