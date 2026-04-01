@@ -37,7 +37,7 @@ Open an issue and include:
 
 ## Suggesting features
 
-Open an issue labelled *enhancement* and describe:
+Open an issue labelled _enhancement_ and describe:
 
 - The problem you are trying to solve.
 - Your proposed solution.

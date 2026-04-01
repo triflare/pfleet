@@ -5,11 +5,11 @@ keeping an exact local copy of every branch.
 
 ## Prerequisites
 
-| Dependency | Minimum version | Notes |
-|---|---|---|
-| Python | 3.10 | Built-in modules only; no third-party packages required |
-| Git | any recent version | Must be on your `PATH` |
-| GitHub CLI (`gh`) | any recent version | Must be authenticated — run `gh auth login` first |
+| Dependency        | Minimum version    | Notes                                                   |
+| ----------------- | ------------------ | ------------------------------------------------------- |
+| Python            | 3.10               | Built-in modules only; no third-party packages required |
+| Git               | any recent version | Must be on your `PATH`                                  |
+| GitHub CLI (`gh`) | any recent version | Must be authenticated — run `gh auth login` first       |
 
 ## Installation
 
@@ -46,20 +46,20 @@ usage: pfleet [-h] [--limit N] [--threads N] [--cleanup | --no-cleanup]
 
 ### Positional arguments
 
-| Argument | Description |
-|---|---|
-| `USER` | One or more GitHub usernames to sync |
+| Argument | Description                          |
+| -------- | ------------------------------------ |
+| `USER`   | One or more GitHub usernames to sync |
 
 ### Options
 
-| Flag | Default | Description |
-|---|---|---|
-| `--limit N`, `-l N` | `100` | Maximum repositories to fetch per user |
-| `--threads N`, `-t N` | `4` | Maximum concurrent worker threads |
-| `--cleanup`, `-c` | interactive prompt | Delete merged local branches after syncing |
-| `--no-cleanup` | interactive prompt | Skip merged-branch cleanup |
-| `--dir DIR`, `-d DIR` | current directory | Root directory where repositories are stored |
-| `--default-branch BRANCH` | `main` | Fallback default branch name used during cleanup |
+| Flag                      | Default            | Description                                      |
+| ------------------------- | ------------------ | ------------------------------------------------ |
+| `--limit N`, `-l N`       | `100`              | Maximum repositories to fetch per user           |
+| `--threads N`, `-t N`     | `4`                | Maximum concurrent worker threads                |
+| `--cleanup`, `-c`         | interactive prompt | Delete merged local branches after syncing       |
+| `--no-cleanup`            | interactive prompt | Skip merged-branch cleanup                       |
+| `--dir DIR`, `-d DIR`     | current directory  | Root directory where repositories are stored     |
+| `--default-branch BRANCH` | `main`             | Fallback default branch name used during cleanup |
 
 ## Examples
 
@@ -101,13 +101,13 @@ pfleet myusername --limit 50
 
 ## Status icons
 
-| Icon | Meaning |
-|---|---|
-| `[ DONE ]` | Operation succeeded |
-| `[ SYNC ]` | Existing repository synced |
-| `[ NEW  ]` | Repository cloned for the first time |
+| Icon       | Meaning                                 |
+| ---------- | --------------------------------------- |
+| `[ DONE ]` | Operation succeeded                     |
+| `[ SYNC ]` | Existing repository synced              |
+| `[ NEW  ]` | Repository cloned for the first time    |
 | `[ SKIP ]` | Repository skipped (dirty working tree) |
-| `[ FAIL ]` | Operation failed |
+| `[ FAIL ]` | Operation failed                        |
 
 ## Notes
 
