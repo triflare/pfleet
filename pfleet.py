@@ -154,6 +154,7 @@ def _worker_update(repo_dir: str, *, cleanup: bool, default_branch_hint: str) ->
         detail = ref_result.stdout.strip()
         return f" {ICON_FAIL} {_c(_RED, name + '  could not list remote refs')}\n   {_c(_RED, detail)}", 0
 
+    failed_branches = []
     for remote_ref in ref_result.stdout.splitlines():
         remote_ref = remote_ref.strip()
         if not remote_ref or remote_ref == "origin/HEAD":
@@ -161,7 +162,13 @@ def _worker_update(repo_dir: str, *, cleanup: bool, default_branch_hint: str) ->
         local_branch = remote_ref.removeprefix("origin/")
         co = _run(["git", "checkout", "-B", local_branch, remote_ref, "--quiet"], cwd=repo_dir)
         if co.returncode != 0:
+            failed_branches.append(local_branch)
             continue  # non-fatal: try remaining branches
+
+    # If any checkout failed, report failure instead of success
+    if failed_branches:
+        detail = ", ".join(failed_branches)
+        return f" {ICON_FAIL} {_c(_RED, name + '  failed to sync branches: ' + detail)}", 0
 
     # Optional: delete local branches already merged into the default branch
     pruned = 0
@@ -483,7 +490,11 @@ def main() -> int:  # noqa: C901 pylint: disable=too-many-branches,too-many-stat
     print(f"  {DIVIDER}")
     if do_cleanup and total_pruned:
         print(f"  {_c(_DIM, f'Total local branches pruned: {total_pruned}')}")
-    print(f"  {ICON_DONE} {_c(_GREEN, 'All tasks completed.')}")
+
+    if overall_ok:
+        print(f"  {ICON_DONE} {_c(_GREEN, 'All tasks completed.')}")
+    else:
+        print(f"  {ICON_FAIL} {_c(_RED, 'Some tasks failed. Exiting with code 1.')}")
     print()
 
     return 0 if overall_ok else 1
