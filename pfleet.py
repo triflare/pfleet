@@ -113,7 +113,8 @@ def _worker_update(repo_dir: str, *, cleanup: bool, default_branch_hint: str) ->
     name = os.path.basename(repo_dir)
 
     # Suppress phantom permission-bit diffs on Windows
-    _run(["git", "config", "core.filemode", "false"], cwd=repo_dir)
+    if sys.platform == "win32":
+        _run(["git", "config", "core.filemode", "false"], cwd=repo_dir)
 
     # Abort if this directory is not actually a git repository
     if _run(["git", "rev-parse", "--is-inside-work-tree"], cwd=repo_dir).returncode != 0:
@@ -167,6 +168,11 @@ def _worker_update(repo_dir: str, *, cleanup: bool, default_branch_hint: str) ->
 
     # If any checkout failed, report failure instead of success
     if failed_branches:
+        # Restore the original branch or detached HEAD before returning failure
+        if original_branch:
+            _run(["git", "checkout", original_branch, "--quiet"], cwd=repo_dir)
+        else:
+            _run(["git", "checkout", "--detach", original_head, "--quiet"], cwd=repo_dir)
         detail = ", ".join(failed_branches)
         return f" {ICON_FAIL} {_c(_RED, name + '  failed to sync branches: ' + detail)}", 0
 
@@ -259,6 +265,10 @@ def _do_cleanup(repo_dir: str, hint: str) -> int:
 
 def _worker_clone(repo_name: str, owner: str, target_dir: str) -> tuple[str, int]:
     """Clone *owner/repo_name* into *target_dir*. Returns (status_line, 0)."""
+    # Ensure the parent directory (owner directory) exists before cloning
+    parent_dir = os.path.dirname(target_dir)
+    os.makedirs(parent_dir, exist_ok=True)
+
     result = _run(["gh", "repo", "clone", f"{owner}/{repo_name}", target_dir, "--", "--quiet"])
 
     if result.returncode != 0:
@@ -268,8 +278,9 @@ def _worker_clone(repo_name: str, owner: str, target_dir: str) -> tuple[str, int
             0,
         )
 
-    # Apply filemode fix immediately after clone
-    _run(["git", "config", "core.filemode", "false"], cwd=target_dir)
+    # Apply filemode fix immediately after clone (Windows only)
+    if sys.platform == "win32":
+        _run(["git", "config", "core.filemode", "false"], cwd=target_dir)
     return f" {ICON_NEW} {_c(_YELLOW, repo_name + '  cloned successfully')}", 0
 
 
